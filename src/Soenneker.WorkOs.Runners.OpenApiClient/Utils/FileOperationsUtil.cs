@@ -22,7 +22,6 @@ using System.Collections.Generic;
 
 namespace Soenneker.WorkOs.Runners.OpenApiClient.Utils;
 
-///<inheritdoc cref="IFileOperationsUtil"/>
 public sealed class FileOperationsUtil : IFileOperationsUtil
 {
     private readonly ILogger<FileOperationsUtil> _logger;
@@ -67,7 +66,11 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string? filePath = await _fileDownloadUtil.Download(openApiDocumentUrl,
             targetFilePath, fileExtension: ".yaml", cancellationToken: cancellationToken);
-        await _yamlUtil.SaveAsJson(filePath ?? targetFilePath, jsonFilePath, true, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new InvalidOperationException("WorkOS OpenAPI download did not produce a file path.");
+
+        await _yamlUtil.SaveAsJson(filePath, jsonFilePath, true, cancellationToken);
         await _openApiFixer.Fix(jsonFilePath, fixedFilePath, cancellationToken);
 
 
@@ -92,8 +95,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     {
         if (!(await _directoryUtil.Exists(directoryPath, cancellationToken)))
         {
-            _logger.LogWarning("Directory does not exist: {DirectoryPath}", directoryPath);
-            return;
+            throw new DirectoryNotFoundException($"Generated source directory does not exist: {directoryPath}");
         }
 
         try
@@ -112,6 +114,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to delete file: {FilePath}", file);
+                        throw;
                     }
                 }
             }
@@ -133,12 +136,14 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to delete directory: {DirectoryPath}", dir);
+                    throw;
                 }
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "An error occurred while cleaning the directory: {DirectoryPath}", directoryPath);
+            throw;
         }
     }
 
@@ -152,8 +157,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         if (!successful)
         {
-            _logger.LogError("Build was not successful, exiting...");
-            return;
+            throw new InvalidOperationException($"Release build failed for {projFilePath}");
         }
 
         string gitHubToken = EnvironmentUtil.GetVariableStrict("GH__TOKEN");
